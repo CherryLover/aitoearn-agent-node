@@ -1,0 +1,66 @@
+name: 构建并发布
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # 版本不在这里写：package.json 的 packageManager 已经钉死了 pnpm 版本，
+      # 两处都写会报 "Multiple versions of pnpm specified"
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查与构建
+        run: pnpm build
+
+      - name: 读版本号，拼出这次的标签
+        id: meta
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}-b${{ github.run_number }}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "zip=aitoearn-agent-node-${tag}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: 打包
+        run: |
+          test -f dist/manifest.json || { echo "dist/manifest.json 不存在，构建没出东西"; exit 1; }
+          cd dist && zip -qr "../${{ steps.meta.outputs.zip }}" .
+
+      - name: 发 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: ${{ steps.meta.outputs.zip }}
+          body: |
+            提交：${{ github.sha }}
+
+            ${{ github.event.head_commit.message }}
+
+            ---
+
+            **怎么装**：下载 `${{ steps.meta.outputs.zip }}` 解压，打开 Chrome 的
+            `chrome://extensions`，右上角打开「开发者模式」，点「加载已解压的扩展程序」，
+            选解压出来的文件夹。装好后点插件图标打开侧边栏，按提示配置服务器地址和登录凭证。
