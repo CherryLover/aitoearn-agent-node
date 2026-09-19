@@ -13,9 +13,12 @@ import type { ServerConfig } from "@/shared/config";
 export default function SetupGate({
   status,
   onRecheck,
+  onPairInstead,
 }: {
   status: SetupStatus;
   onRecheck: () => Promise<void>;
+  /** 只拿这台机器领活的话，配对不需要登录凭证，从这里直接进设备页 */
+  onPairInstead: () => void;
 }) {
   const [apiBase, setApiBase] = useState(status.apiBase);
   const [homeUrl, setHomeUrl] = useState(status.homeUrl);
@@ -142,21 +145,30 @@ export default function SetupGate({
             </button>
           </div>
           <p className="mt-2 text-xs text-zinc-400">
-            这两种办法都是过渡。以后会改成插件自己跟服务器配对，不再依赖网页登录。
+            聊天和定时任务要用它。只让这台机器领活的话，用下面的配对就行。
           </p>
         </Step>
       </ol>
 
       {note && <div className="mt-4 text-xs text-red-600 dark:text-red-400">{note}</div>}
 
-      <button
-        className="mt-6 flex items-center gap-1.5 self-start text-xs text-zinc-500 underline"
-        disabled={busy !== null}
-        onClick={() => void run("recheck", async () => {})}
-      >
-        <RefreshCw className={`h-3 w-3 ${busy === "recheck" ? "animate-spin" : ""}`} />
-        重新检查
-      </button>
+      <div className="mt-6 flex items-center gap-4">
+        <button
+          className="flex items-center gap-1.5 text-xs text-zinc-500 underline"
+          disabled={busy !== null}
+          onClick={() => void run("recheck", async () => {})}
+        >
+          <RefreshCw className={`h-3 w-3 ${busy === "recheck" ? "animate-spin" : ""}`} />
+          重新检查
+        </button>
+        <button
+          className="text-xs text-zinc-500 underline disabled:opacity-40"
+          disabled={!serverDone}
+          onClick={onPairInstead}
+        >
+          只让这台机器领活，去配对
+        </button>
+      </div>
     </div>
   );
 }

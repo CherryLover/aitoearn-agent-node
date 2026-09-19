@@ -7,6 +7,7 @@
 import type { ServerConfig } from "./config";
 import type { ChatModel } from "@/agent/models";
 import type { TaskInput, TaskSnapshot } from "@/tasks/types";
+import type { DeviceSnapshot, PairInput } from "@/device/types";
 import type { SetupStatus } from "./setup";
 
 export type BackgroundRequest =
@@ -30,7 +31,13 @@ export type BackgroundRequest =
   | { type: "tasks:runNow"; payload: { id: string } }
   | { type: "tasks:stop"; payload: { id: string } }
   | { type: "tasks:clearRuns"; payload: { id: string } }
-  | { type: "tasks:alarms" };
+  | { type: "tasks:alarms" }
+  | { type: "device:snapshot" }
+  | { type: "device:pair"; payload: PairInput }
+  | { type: "device:unpair" }
+  | { type: "device:heartbeat" }
+  | { type: "device:claim" }
+  | { type: "device:clearJobs" };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
@@ -50,9 +57,10 @@ export type BackgroundEvent =
     }
   | { type: "chat:done"; conversationId: string }
   | { type: "chat:error"; conversationId: string; error: string }
-  | { type: "tasks:changed" };
+  | { type: "tasks:changed" }
+  | { type: "device:changed" };
 
-export type { TaskSnapshot, SetupStatus };
+export type { TaskSnapshot, SetupStatus, DeviceSnapshot };
 
 export interface ModelsPayload {
   models: ChatModel[];

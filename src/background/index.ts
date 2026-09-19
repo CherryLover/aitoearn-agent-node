@@ -25,6 +25,16 @@ import {
 import { enqueueRun, stopRun, getRuntimeState } from "@/tasks/runner";
 import { handleTaskAlarm, syncTaskAlarm, rebuildAllAlarms, listTaskAlarms } from "@/tasks/scheduler";
 import type { TaskSnapshot } from "@/tasks/types";
+import {
+  bootstrapDevice,
+  clearJobHistory,
+  handleDeviceAlarm,
+  heartbeatNow,
+  pair,
+  pump,
+  snapshot as deviceSnapshot,
+  unpair,
+} from "@/device";
 
 type Handler = (payload: any) => Promise<unknown>;
 
@@ -102,15 +112,40 @@ const handlers: Record<string, Handler> = {
   },
   // 调试用：看现在挂着哪些闹钟、什么时候响
   "tasks:alarms": async () => listTaskAlarms(),
+
+  "device:snapshot": async () => deviceSnapshot(),
+  // 配对结果里有令牌明文，不往界面送；界面自己再拉一份快照
+  "device:pair": async (payload) => {
+    await pair(payload);
+    return { ok: true };
+  },
+  "device:unpair": async () => {
+    await unpair();
+    return { ok: true };
+  },
+  "device:heartbeat": async () => {
+    await heartbeatNow();
+    return { ok: true };
+  },
+  "device:claim": async () => ({ worked: await pump() }),
+  "device:clearJobs": async () => {
+    await clearJobHistory();
+    return { ok: true };
+  },
 };
+
+/** 后台自己广播出去的事件，回到这里时不要当成未知请求报错 */
+function isBroadcast(type: unknown): boolean {
+  if (typeof type !== "string") return false;
+  return type.startsWith("chat:") || type === "tasks:changed" || type === "device:changed";
+}
 
 // ---- 顶层同步注册，下面不要放 await ----
 
 chrome.runtime.onMessage.addListener((request: BackgroundRequest, _sender, sendResponse) => {
   const handler = handlers[request?.type];
   if (!handler) {
-    // 后台自己广播出去的事件也会回到这里，别把它们当成未知请求报错
-    if (typeof request?.type === "string" && request.type.startsWith("chat:") && !("payload" in request)) {
+    if (isBroadcast(request?.type) && !("payload" in request)) {
       return false;
     }
     sendResponse({ ok: false, error: `未知的消息类型: ${request?.type}` } satisfies BackgroundResponse);
@@ -133,6 +168,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 // 闹钟监听器一定要在顶层同步注册：浏览器休眠后被闹钟唤醒时，
 // Chrome 可能在任何 await 之前就派发事件，晚注册就会漏掉这一次触发。
 chrome.alarms.onAlarm.addListener(handleTaskAlarm);
+chrome.alarms.onAlarm.addListener(handleDeviceAlarm);
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[AiToEarn 执行端] 已安装/更新");
@@ -143,4 +179,5 @@ void (async () => {
   const interrupted = await markInterruptedRuns();
   if (interrupted > 0) console.log(`[AiToEarn 执行端] ${interrupted} 条运行记录标为中断`);
   await rebuildAllAlarms();
+  await bootstrapDevice();
 })();

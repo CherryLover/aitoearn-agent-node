@@ -12,6 +12,7 @@
 import { loadServerConfig } from "./config";
 import { loadAuth } from "./auth";
 import { fetchChatModels } from "@/agent/models";
+import { loadDevice } from "@/device/store";
 
 export interface CheckItem {
   ok: boolean;
@@ -23,6 +24,11 @@ export interface SetupStatus {
   auth: CheckItem & { userName?: string; expiresAt?: number };
   model: CheckItem & { count: number };
   ready: boolean;
+  /**
+   * 这台机器配过对没有。
+   * 配对不需要网页登录凭证，所以配过对的执行端机器不该再被凭证这一步卡住。
+   */
+  devicePaired: boolean;
   apiBase: string;
   homeUrl: string;
 }
@@ -99,11 +105,14 @@ export async function checkSetup(): Promise<SetupStatus> {
     }
   }
 
+  const { token: deviceToken } = await loadDevice();
+
   return {
     server,
     auth,
     model,
     ready: server.ok && auth.ok && model.ok,
+    devicePaired: Boolean(deviceToken),
     apiBase,
     homeUrl,
   };
