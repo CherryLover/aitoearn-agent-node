@@ -4,8 +4,64 @@ import {
 } from "lucide-react";
 import { useTaskStore } from "./taskStore";
 import type { Task, TaskInput, TaskRun } from "@/tasks/types";
+import RecordsPane from "./RecordsPane";
 
+type Section = "records" | "schedule";
+
+/**
+ * TasksPane - 「任务」页
+ *
+ * 两样东西放在一起：服务端派下来的工单和本地的定时任务。
+ * 它们在用户眼里都是「插件替我干的活」，区别只是谁派的，
+ * 所以**执行记录是合在一起的一个列表**，只有「管定时任务」才单独一段。
+ *
+ * 默认落在记录上：绝大多数时候人打开这一页是想看「刚才那件事干成了没有」，
+ * 而不是来改定时规则的。
+ */
 export default function TasksPane() {
+  const [section, setSection] = useState<Section>("records");
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-1 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+        <SectionButton active={section === "records"} onClick={() => setSection("records")}>
+          执行记录
+        </SectionButton>
+        <SectionButton active={section === "schedule"} onClick={() => setSection("schedule")}>
+          定时任务
+        </SectionButton>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {section === "records" ? <RecordsPane /> : <SchedulePane />}
+      </div>
+    </div>
+  );
+}
+
+function SectionButton({
+  active, onClick, children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      className={`rounded-md px-2 py-0.5 text-xs ${
+        active
+          ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100"
+          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+
+function SchedulePane() {
   const store = useTaskStore();
   const { tasks, runs, queued, error, loaded, refresh, watch } = store;
   const [editing, setEditing] = useState<Task | "new" | null>(null);

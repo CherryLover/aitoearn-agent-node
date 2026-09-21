@@ -3,7 +3,6 @@ import { Loader2, RefreshCw, Download, Link2Off, ExternalLink } from "lucide-rea
 import { useDeviceStore } from "./deviceStore";
 import CapabilitiesSection from "./CapabilitiesSection";
 import DryRunPanel from "./DryRunPanel";
-import type { JobRecord } from "@/device/types";
 
 export default function DevicePane() {
   const store = useDeviceStore();
@@ -206,55 +205,12 @@ function Paired() {
         {note && <span className="text-zinc-500">{note}</span>}
       </div>
 
-      <div>
-        <div className="mb-1 flex items-center justify-between text-zinc-500">
-          <span>工单记录</span>
-          {jobs.length > 0 && (
-            <button className="underline" onClick={() => void store.clearJobs()}>
-              清空
-            </button>
-          )}
-        </div>
-        {jobs.length === 0 ? (
-          <div className="text-zinc-500">还没干过活。到点会自己去领，也可以点上面的按钮催一下。</div>
-        ) : (
-          <div className="space-y-1.5">
-            {jobs.map((job) => (
-              <JobCard key={`${job.taskId}_${job.startedAt}`} job={job} />
-            ))}
-          </div>
-        )}
+      {/* 干过的活在「任务」页看：云端工单和本地定时任务是同一类东西，
+          分在两个页面会让人每次都要先想「刚才那件事算哪一类」 */}
+      <div className="text-zinc-500">
+        {jobs.length > 0 ? `干过 ${jobs.length} 个活，` : ""}
+        执行记录在「任务」页里。
       </div>
-    </div>
-  );
-}
-
-function JobCard({ job }: { job: JobRecord }) {
-  const [open, setOpen] = useState(false);
-  const tone = {
-    running: "text-blue-600",
-    success: "text-emerald-600",
-    failed: "text-red-600",
-    dropped: "text-zinc-500",
-  }[job.outcome];
-  const label = { running: "干着", success: "成功", failed: "失败", dropped: "已丢弃" }[job.outcome];
-
-  return (
-    <div className="rounded border border-zinc-200 px-2 py-1.5 dark:border-zinc-800">
-      <button className="flex w-full items-center gap-2 text-left" onClick={() => setOpen((v) => !v)}>
-        {job.outcome === "running" && <Loader2 className="h-3 w-3 animate-spin text-blue-600" />}
-        <span className={tone}>{label}</span>
-        <span className="font-mono text-[11px] text-zinc-500">{job.type}</span>
-        <span className="ml-auto text-zinc-400">{formatTime(job.startedAt)}</span>
-      </button>
-      {job.summary && <div className="mt-1 break-all text-zinc-600 dark:text-zinc-400">{job.summary}</div>}
-      {job.error && <div className="mt-1 text-red-600 dark:text-red-400">{job.error}</div>}
-      {open && (
-        <div className="mt-1 border-t border-zinc-200 pt-1 text-zinc-500 dark:border-zinc-800">
-          <div className="font-mono text-[11px] break-all">{job.taskId}</div>
-          {job.finishedAt && <div>耗时 {((job.finishedAt - job.startedAt) / 1000).toFixed(1)} 秒</div>}
-        </div>
-      )}
     </div>
   );
 }

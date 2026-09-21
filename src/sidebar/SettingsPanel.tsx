@@ -25,7 +25,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="space-y-3 border-b border-zinc-200 px-3 py-3 text-xs dark:border-zinc-800">
+    <div className="space-y-3 px-3 py-3 text-xs">
       <section className="space-y-2">
         <div className="font-medium text-zinc-700 dark:text-zinc-300">服务器</div>
         <input
@@ -117,8 +117,9 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
 
       {note && <div className="text-zinc-500">{note}</div>}
 
+      {/* 顶栏已经有返回箭头了，这里再给一个出口，翻到底的人不用再滚回去 */}
       <button className="text-zinc-400 underline" onClick={onClose}>
-        收起
+        返回
       </button>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Settings } from "lucide-react";
+import { ArrowLeft, Settings } from "lucide-react";
 import ChatPane from "./ChatPane";
 import TasksPane from "./TasksPane";
 import DevicePane from "./DevicePane";
@@ -10,11 +10,20 @@ import { sendToBackground, type SetupStatus } from "@/shared/messages";
 
 type Tab = "chat" | "tasks" | "device";
 
+/**
+ * 当前这一层显示什么。
+ *
+ * 设置是**盖在内容上**的一层，不是插在标签栏和内容之间的一块：
+ * 原来那样是把设置面板和当前标签页的内容上下堆着，内容被挤到下面半屏，
+ * 人既看不全设置也看不全内容，还搞不清自己在哪一层。
+ */
+type View = { kind: "tab" } | { kind: "settings" };
+
 export default function App() {
   const store = useChatStore();
   const { models, selectedModel, init } = store;
   const [tab, setTab] = useState<Tab>("chat");
-  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<View>({ kind: "tab" });
   const [status, setStatus] = useState<SetupStatus | null>(null);
   /** 用户在引导页上选了「只领活」：这一趟先放行，进去配对 */
   const [skipToPairing, setSkipToPairing] = useState(false);
@@ -73,27 +82,43 @@ export default function App() {
         onPairInstead={() => {
           setSkipToPairing(true);
           setTab("device");
+          setView({ kind: "tab" });
         }}
       />
     );
   }
 
+  const inSettings = view.kind === "settings";
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-        <div className="flex items-center gap-1">
-          <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
-            聊天
-          </TabButton>
-          <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")}>
-            任务
-          </TabButton>
-          <TabButton active={tab === "device"} onClick={() => setTab("device")}>
-            设备
-          </TabButton>
-        </div>
+        {inSettings ? (
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              onClick={() => setView({ kind: "tab" })}
+              title="返回"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <span className="text-sm font-medium">设置</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+              聊天
+            </TabButton>
+            <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")}>
+              任务
+            </TabButton>
+            <TabButton active={tab === "device"} onClick={() => setTab("device")}>
+              设备
+            </TabButton>
+          </div>
+        )}
         <div className="flex items-center gap-2">
-          {models.length > 0 && (
+          {!inSettings && models.length > 0 && (
             <select
               className="max-w-28 rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
               value={selectedModel ?? ""}
@@ -106,36 +131,48 @@ export default function App() {
               ))}
             </select>
           )}
-          <button
-            className="rounded p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            onClick={() => setShowSettings((v) => !v)}
-            title="设置"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
+          {!inSettings && (
+            <button
+              className="rounded p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              onClick={() => setView({ kind: "settings" })}
+              title="设置"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </header>
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
-
-      {!status.auth.ok && tab !== "device" && (
+      {!inSettings && !status.auth.ok && tab !== "device" && (
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <span className="flex-1">没有登录凭证，聊天和定时任务用不了</span>
-          <button className="underline" onClick={() => setShowSettings(true)}>
+          <button className="underline" onClick={() => setView({ kind: "settings" })}>
             去配置
           </button>
         </div>
       )}
 
-      {/* 两个面板都保持挂载：切到任务页再切回来，对话不会没了 */}
-      <div className={`min-h-0 flex-1 ${tab === "chat" ? "" : "hidden"}`}>
-        <ChatPane />
-      </div>
-      <div className={`min-h-0 flex-1 ${tab === "tasks" ? "" : "hidden"}`}>
-        <TasksPane />
-      </div>
-      <div className={`min-h-0 flex-1 ${tab === "device" ? "" : "hidden"}`}>
-        <DevicePane />
+      {/*
+        只有一个内容区，谁在上面谁占满整块。
+        三个标签页都保持挂载（切到别处再切回来，对话和滚动位置不会没了），
+        靠 hidden 切换；设置盖在最上面，靠的是从内容区里整个换掉，
+        而不是再往下堆一块。
+      */}
+      <div className="relative min-h-0 flex-1">
+        <div className={`absolute inset-0 ${tab === "chat" && !inSettings ? "" : "hidden"}`}>
+          <ChatPane />
+        </div>
+        <div className={`absolute inset-0 ${tab === "tasks" && !inSettings ? "" : "hidden"}`}>
+          <TasksPane />
+        </div>
+        <div className={`absolute inset-0 ${tab === "device" && !inSettings ? "" : "hidden"}`}>
+          <DevicePane />
+        </div>
+        {inSettings && (
+          <div className="absolute inset-0 overflow-y-auto bg-white dark:bg-zinc-950">
+            <SettingsPanel onClose={() => setView({ kind: "tab" })} />
+          </div>
+        )}
       </div>
     </div>
   );

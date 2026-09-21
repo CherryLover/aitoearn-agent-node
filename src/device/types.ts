@@ -1,3 +1,5 @@
+import type { JobDetail } from "./job-detail";
+
 /**
  * 执行端（设备）这条线的数据结构。
  *
@@ -80,6 +82,15 @@ export interface JobRecord {
   /** 一行摘要，成功时是结果，失败时是原因 */
   summary: string | null;
   error: string | null;
+  /** 服务端派下来的载荷，原样留一份 */
+  payload: JobDetail | null;
+  /**
+   * 回报给服务端的东西：成功是结果，失败是失败原因。
+   *
+   * 跟 `summary` 分开存：摘要是压成一行给列表看的，
+   * 而出了问题要对的是「我到底送上去了什么」，那份必须是原样。
+   */
+  reported: JobDetail | null;
 }
 
 /** 给界面看的设备状态。令牌不往界面送，界面只需要知道有没有 */

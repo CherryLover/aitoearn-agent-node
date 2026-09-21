@@ -23,6 +23,7 @@ import {
 import { notifyDeviceChanged } from "./events";
 import { runJob, summarize } from "./jobs";
 import { addJob, loadDevice, patchDevice, patchJob } from "./store";
+import { toJobDetail } from "./job-detail";
 import type { ClaimedTask, JobRecord } from "./types";
 
 /** 一次唤醒最多连着干几个活，免得队列很长时一直占着 Service Worker */
@@ -84,6 +85,10 @@ async function runOne(task: ClaimedTask): Promise<boolean> {
     outcome: "running",
     summary: null,
     error: null,
+    // 载荷在这里就存下来：后面任何一条失败分支都能显示「当时派下来的是什么」，
+    // 而排查失败恰恰最需要这个
+    payload: toJobDetail(task.payload),
+    reported: null,
   };
   await addJob(record);
   notifyDeviceChanged();
@@ -101,7 +106,11 @@ async function runOne(task: ClaimedTask): Promise<boolean> {
     stage = "report";
     await reportTask(task.id, { leaseId: task.leaseId, success: true, result });
 
-    await finishJob(task.id, { outcome: "success", summary: summarize(result) });
+    await finishJob(task.id, {
+      outcome: "success",
+      summary: summarize(result),
+      reported: toJobDetail(result),
+    });
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -139,6 +148,7 @@ async function runOne(task: ClaimedTask): Promise<boolean> {
     const reported = await reportFailure(task, message);
     await finishJob(task.id, {
       outcome: reported === "dropped" ? "dropped" : "failed",
+      reported: reported === "reported" ? toJobDetail({ success: false, error: message }) : null,
       error:
         reported === "reported"
           ? message
