@@ -28,13 +28,16 @@ import type { TaskSnapshot } from "@/tasks/types";
 import {
   bootstrapDevice,
   clearJobHistory,
+  detectCapabilities,
   handleDeviceAlarm,
   heartbeatNow,
   pair,
   pump,
+  setCapabilities,
   snapshot as deviceSnapshot,
   unpair,
 } from "@/device";
+import { collect as collectCreatorNotes, parsePayload as parseCollectPayload } from "@/device/jobs/sync-creator-notes";
 
 type Handler = (payload: any) => Promise<unknown>;
 
@@ -132,6 +135,15 @@ const handlers: Record<string, Handler> = {
     await clearJobHistory();
     return { ok: true };
   },
+  "device:setCapabilities": async (payload) => ({
+    capabilities: await setCapabilities(payload?.capabilities ?? []),
+  }),
+  // cookies 是可选权限，申请必须由用户手势触发，所以请求权限放在侧边栏，这里只管探测
+  "device:detectCapabilities": async () => detectCapabilities(),
+
+  // 本地试跑：不经过服务端，直接拿手填的 entryUrl + spec 跑一遍采集。
+  // 走的是工单同一份代码（collect），试跑通过就说明工单也能通过。
+  "device:dryRunCollect": async (payload) => collectCreatorNotes(parseCollectPayload(payload ?? {})),
 };
 
 /** 后台自己广播出去的事件，回到这里时不要当成未知请求报错 */

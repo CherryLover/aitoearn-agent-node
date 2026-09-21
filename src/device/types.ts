@@ -95,6 +95,14 @@ export interface DeviceSnapshot {
   online: boolean;
   apiBase: string;
   homeUrl: string;
+  /** 这台机器声明能干哪些平台的活，上报给服务端做派活过滤 */
+  capabilities: string[];
+  /** 插件这个版本认识的平台，界面拿来画勾选框 */
+  knownPlatforms: { id: string; name: string; entryUrl: string }[];
+  /** 插件这个版本会干的工单类型，界面上如实显示，别让人以为什么都能干 */
+  supportedJobTypes: string[];
+  /** 有没有 cookies 权限，没有就不能自动探测登录状态 */
+  canDetect: boolean;
 }
 
 export interface PairInput {

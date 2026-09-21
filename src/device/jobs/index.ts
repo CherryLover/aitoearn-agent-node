@@ -4,8 +4,14 @@
  * 一个类型一个处理函数，返回的东西就是回报给服务端的 result，格式要跟服务端的校验对上，
  * 对不上会被判成结果不合法。不认识的类型直接抛错，由上层如实回报失败——
  * 不要假装干成了，服务端那边会当成真做完了。
+ *
+ * **没实现的类型就是不注册。** 不要放一个「返回空结果」的占位处理函数：
+ * 那样服务端会收到成功回报，工单转 succeeded，问题要到看数据时才发现。
+ * 现在 `publish` 和 `claim_link` 就是这种情况——服务端载荷格式已经定了，
+ * 但各平台具体怎么点还没定，所以这里一个都不注册，领到了会明确回报「不会干」。
  */
-import type { ClaimedTask } from "./types";
+import type { ClaimedTask } from "../types";
+import { runSyncCreatorNotes } from "./sync-creator-notes";
 
 export type JobHandler = (task: ClaimedTask) => Promise<Record<string, unknown>>;
 
@@ -23,6 +29,7 @@ const echo: JobHandler = async (task) => {
 
 const handlers: Record<string, JobHandler> = {
   echo,
+  sync_creator_notes: runSyncCreatorNotes,
 };
 
 export function supportedTypes(): string[] {

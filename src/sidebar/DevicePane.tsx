@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, Download, Link2Off, ExternalLink } from "lucide-react";
 import { useDeviceStore } from "./deviceStore";
+import CapabilitiesSection from "./CapabilitiesSection";
+import DryRunPanel from "./DryRunPanel";
 import type { JobRecord } from "@/device/types";
 
 export default function DevicePane() {
@@ -22,9 +24,12 @@ export default function DevicePane() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-3 py-3 text-xs">
+    <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-3 text-xs">
       {snapshot.device.hasToken ? <Paired /> : <PairForm />}
-      {error && <div className="mt-3 text-red-600 dark:text-red-400">{error}</div>}
+      {/* 能力在配对时就要带上，所以配对前也让人先勾 */}
+      <CapabilitiesSection />
+      <DryRunPanel />
+      {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
     </div>
   );
 }

@@ -136,7 +136,10 @@ interface PairedResponse {
  * 拿配对码换设备令牌。
  * 令牌明文只在这里返回一次，调用方必须负责存起来。
  */
-export async function pairDevice(input: PairInput): Promise<PairedResponse> {
+export async function pairDevice(
+  input: PairInput,
+  capabilities: string[] = [],
+): Promise<PairedResponse> {
   return post<PairedResponse>(
     "/device-api/pair",
     {
@@ -144,7 +147,7 @@ export async function pairDevice(input: PairInput): Promise<PairedResponse> {
       name: input.name.trim(),
       version: currentVersion(),
       platform: currentPlatform(),
-      capabilities: [],
+      capabilities,
       accounts: [],
     },
     { anonymous: true },

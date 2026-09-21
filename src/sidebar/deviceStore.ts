@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { sendToBackground, type DeviceSnapshot } from "@/shared/messages";
+import type { DetectedPlatform } from "@/device/capabilities";
 
 interface DeviceStoreState {
   snapshot: DeviceSnapshot | null;
@@ -14,6 +15,9 @@ interface DeviceStoreState {
   heartbeat: () => Promise<void>;
   claim: () => Promise<number>;
   clearJobs: () => Promise<void>;
+  setCapabilities: (capabilities: string[]) => Promise<void>;
+  /** 探测失败要在按钮旁边就地报错，所以这个不吞异常 */
+  detectCapabilities: () => Promise<DetectedPlatform[]>;
 }
 
 export const useDeviceStore = create<DeviceStoreState>((set, get) => {
@@ -57,6 +61,18 @@ export const useDeviceStore = create<DeviceStoreState>((set, get) => {
       await sendToBackground({ type: "device:pair", payload: { code, name } });
       set({ error: null });
       await get().refresh();
+    },
+
+    setCapabilities: (capabilities) =>
+      guard(() => sendToBackground({ type: "device:setCapabilities", payload: { capabilities } })),
+
+    async detectCapabilities() {
+      const res = await sendToBackground<{ capabilities: string[]; detected: DetectedPlatform[] }>({
+        type: "device:detectCapabilities",
+      });
+      set({ error: null });
+      await get().refresh();
+      return res.detected;
     },
 
     unpair: () => guard(() => sendToBackground({ type: "device:unpair" })),

@@ -22,6 +22,15 @@ import { clearDevice, clearJobs, isOnline, loadDevice, loadJobs, patchDevice, sa
 import { EMPTY_DEVICE, type DeviceSnapshot, type DeviceState, type PairInput } from "./types";
 import { isBusy, pump } from "./worker";
 import { loadServerConfig } from "@/shared/config";
+import {
+  detectAndMerge,
+  hasCookiesPermission,
+  loadCapabilities,
+  saveCapabilities,
+  type DetectedPlatform,
+} from "./capabilities";
+import { PLATFORMS } from "./platforms";
+import { supportedTypes } from "./jobs";
 
 export const HEARTBEAT_ALARM = "device:heartbeat";
 export const CLAIM_ALARM = "device:claim";
@@ -89,7 +98,7 @@ export async function pair(input: PairInput): Promise<DeviceState> {
 
   let paired: Awaited<ReturnType<typeof pairDevice>>;
   try {
-    paired = await pairDevice({ code, name });
+    paired = await pairDevice({ code, name }, await loadCapabilities());
   } catch (err) {
     if (err instanceof DeviceApiError) {
       if (err.code === CODE.PAIRING_CODE_INVALID)
@@ -134,7 +143,8 @@ export async function heartbeatNow(): Promise<DeviceState> {
   const status = isBusy() || getRuntimeState().activeRunId ? "busy" : "idle";
 
   try {
-    const res = await sendHeartbeat(status);
+    // 每次心跳都整份带上能力：服务端是整份覆盖，漏发一次这台机器就变成「什么都不会」
+    const res = await sendHeartbeat(status, { capabilities: await loadCapabilities() });
     const next = await patchDevice({
       id: res.deviceId || device.id,
       lastHeartbeatAt: Date.now(),
@@ -155,8 +165,35 @@ export async function heartbeatNow(): Promise<DeviceState> {
   }
 }
 
+/**
+ * 改这台机器能干的平台。
+ *
+ * 存完立刻补一次心跳，不等下一个闹钟：服务端是按心跳整份覆盖能力的，
+ * 用户刚勾完就去网页下单，得马上能派得下来。
+ */
+export async function setCapabilities(list: string[]): Promise<string[]> {
+  const next = await saveCapabilities(list);
+  await heartbeatNow();
+  notifyDeviceChanged();
+  return next;
+}
+
+/** 探测已登录的平台并并入勾选，同样立刻补一次心跳 */
+export async function detectCapabilities(): Promise<{ capabilities: string[]; detected: DetectedPlatform[] }> {
+  const result = await detectAndMerge();
+  await heartbeatNow();
+  notifyDeviceChanged();
+  return result;
+}
+
 export async function snapshot(): Promise<DeviceSnapshot> {
-  const [device, jobs, config] = await Promise.all([loadDevice(), loadJobs(), loadServerConfig()]);
+  const [device, jobs, config, capabilities, canDetect] = await Promise.all([
+    loadDevice(),
+    loadJobs(),
+    loadServerConfig(),
+    loadCapabilities(),
+    hasCookiesPermission(),
+  ]);
   const { token, ...rest } = device;
   return {
     device: { ...rest, hasToken: Boolean(token) },
@@ -165,6 +202,10 @@ export async function snapshot(): Promise<DeviceSnapshot> {
     online: isOnline(device),
     apiBase: config.apiBase,
     homeUrl: config.homeUrl,
+    capabilities,
+    knownPlatforms: PLATFORMS.map((p) => ({ id: p.id, name: p.name, entryUrl: p.entryUrl })),
+    supportedJobTypes: supportedTypes(),
+    canDetect,
   };
 }
 

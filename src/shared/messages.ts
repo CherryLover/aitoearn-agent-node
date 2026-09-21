@@ -37,7 +37,10 @@ export type BackgroundRequest =
   | { type: "device:unpair" }
   | { type: "device:heartbeat" }
   | { type: "device:claim" }
-  | { type: "device:clearJobs" };
+  | { type: "device:clearJobs" }
+  | { type: "device:setCapabilities"; payload: { capabilities: string[] } }
+  | { type: "device:detectCapabilities" }
+  | { type: "device:dryRunCollect"; payload: Record<string, unknown> };
 
 export type BackgroundResponse<T = unknown> =
   | { ok: true; data: T }
