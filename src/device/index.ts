@@ -26,6 +26,7 @@ import {
   detectAndMerge,
   hasCookiesPermission,
   loadCapabilities,
+  reportedCapabilities,
   saveCapabilities,
   type DetectedPlatform,
 } from "./capabilities";
@@ -98,7 +99,7 @@ export async function pair(input: PairInput): Promise<DeviceState> {
 
   let paired: Awaited<ReturnType<typeof pairDevice>>;
   try {
-    paired = await pairDevice({ code, name }, await loadCapabilities());
+    paired = await pairDevice({ code, name }, await reportedCapabilities());
   } catch (err) {
     if (err instanceof DeviceApiError) {
       if (err.code === CODE.PAIRING_CODE_INVALID)
@@ -144,7 +145,7 @@ export async function heartbeatNow(): Promise<DeviceState> {
 
   try {
     // 每次心跳都整份带上能力：服务端是整份覆盖，漏发一次这台机器就变成「什么都不会」
-    const res = await sendHeartbeat(status, { capabilities: await loadCapabilities() });
+    const res = await sendHeartbeat(status, { capabilities: await reportedCapabilities() });
     const next = await patchDevice({
       id: res.deviceId || device.id,
       lastHeartbeatAt: Date.now(),

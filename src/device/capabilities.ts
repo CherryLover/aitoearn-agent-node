@@ -9,6 +9,7 @@
  * 所以探测结果只作为勾选的建议，最终听用户的。
  */
 import { PLATFORMS, findPlatform } from "./platforms";
+import { supportedTypes } from "./jobs";
 
 const CAPABILITIES_KEY = "DeviceCapabilities";
 
@@ -24,9 +25,25 @@ function normalize(list: unknown): string[] {
   return [...seen].sort();
 }
 
+/** 用户勾了哪些平台。界面读这个，别读 reportedCapabilities */
 export async function loadCapabilities(): Promise<string[]> {
   const stored = await chrome.storage.local.get(CAPABILITIES_KEY);
   return normalize(stored[CAPABILITIES_KEY]);
+}
+
+/**
+ * 真正上报给服务端的那份：用户勾的平台 + 这个插件版本会干的工单类型（前缀 `job:`）。
+ *
+ * 为什么把工单类型也算进能力：服务端建 auto 工单前会检查「名下有没有机器会干这活」。
+ * 只报平台的话，服务端只知道这台机器登录着小红书，不知道插件实现没实现发布——
+ * 于是工单建出来、派下来、插件回一句「不会干」、重试到用尽变 failed，
+ * 中间几分钟网页上看着一切正常。带上 job: 之后这种工单在建单时就被挡掉了。
+ *
+ * 插件升级后多实现一类工单，下一次心跳就自动把新能力带上去，不用用户做什么。
+ */
+export async function reportedCapabilities(): Promise<string[]> {
+  const platforms = await loadCapabilities();
+  return [...platforms, ...supportedTypes().map((type) => `job:${type}`)];
 }
 
 export async function saveCapabilities(list: string[]): Promise<string[]> {

@@ -18,6 +18,7 @@
  * 一条都没读到时判失败，不回报空数组当成功：空数据比报错难查十倍。
  */
 import { isAllowedEntryUrl, findPlatform } from "../platforms";
+import { COLLECT_ERROR, CollectError } from "./collect-errors";
 import type { ClaimedTask } from "../types";
 
 /** 整个工单的上限。实测滚动一次就能把渲染进程卡到 45 秒，别按秒级设计 */
@@ -77,22 +78,22 @@ export interface SyncCreatorNotesResult extends Record<string, unknown> {
 /** 载荷校验。缺字段就直接说清楚缺哪个，别等注入之后才崩在页面里 */
 export function parsePayload(raw: Record<string, unknown>): SyncCreatorNotesPayload {
   const platform = typeof raw.platform === "string" ? raw.platform : "";
-  if (!platform) throw new Error("载荷里没有 platform");
-  if (!findPlatform(platform)) throw new Error(`这个插件版本不认识平台「${platform}」`);
+  if (!platform) throw new CollectError(COLLECT_ERROR.SPEC_INVALID, "载荷里没有 platform");
+  if (!findPlatform(platform)) throw new CollectError(COLLECT_ERROR.SPEC_INVALID, `这个插件版本不认识平台「${platform}」`);
 
   const entryUrl = typeof raw.entryUrl === "string" ? raw.entryUrl : "";
-  if (!entryUrl) throw new Error("载荷里没有 entryUrl");
+  if (!entryUrl) throw new CollectError(COLLECT_ERROR.SPEC_INVALID, "载荷里没有 entryUrl");
   if (!isAllowedEntryUrl(platform, entryUrl)) {
-    throw new Error(`地址不在允许的域名里：${entryUrl}`);
+    throw new CollectError(COLLECT_ERROR.ENTRY_URL_NOT_ALLOWED, `地址不在允许的域名里：${entryUrl}`);
   }
 
   const spec = raw.spec as CollectSpec | undefined;
-  if (!spec || typeof spec !== "object") throw new Error("载荷里没有 spec");
+  if (!spec || typeof spec !== "object") throw new CollectError(COLLECT_ERROR.SPEC_INVALID, "载荷里没有 spec");
   for (const key of ["cardSelector", "titleSelector", "timeSelector", "statSelector"] as const) {
-    if (typeof spec[key] !== "string" || !spec[key]) throw new Error(`spec 里缺 ${key}`);
+    if (typeof spec[key] !== "string" || !spec[key]) throw new CollectError(COLLECT_ERROR.SPEC_INVALID, `spec 里缺 ${key}`);
   }
   if (!spec.metricByIconPrefix || typeof spec.metricByIconPrefix !== "object") {
-    throw new Error("spec 里缺 metricByIconPrefix，没有它只能按位置猜指标，不允许");
+    throw new CollectError(COLLECT_ERROR.SPEC_INVALID, "spec 里缺 metricByIconPrefix，没有它只能按位置猜指标，不允许");
   }
 
   return {
@@ -126,7 +127,7 @@ export async function collect(payload: SyncCreatorNotesPayload): Promise<SyncCre
     height: 900,
   });
   const tabId = win?.tabs?.[0]?.id;
-  if (!win?.id || tabId === undefined) throw new Error("开不了托管窗口");
+  if (!win?.id || tabId === undefined) throw new CollectError(COLLECT_ERROR.FAILED, "开不了托管窗口");
 
   try {
     await waitForTabComplete(tabId, Math.min(60_000, remaining(deadline)));
@@ -134,7 +135,8 @@ export async function collect(payload: SyncCreatorNotesPayload): Promise<SyncCre
     // 列表出现之前什么都别做——没登录时页面会停在登录页，这里就会超时
     const appeared = await waitForCards(tabId, spec.cardSelector, Math.min(CARDS_APPEAR_TIMEOUT_MS, remaining(deadline)));
     if (!appeared) {
-      throw new Error(
+      throw new CollectError(
+        COLLECT_ERROR.NOT_LOGGED_IN,
         `等了 ${Math.round(CARDS_APPEAR_TIMEOUT_MS / 1000)} 秒列表也没出现。多半是这台机器没登录${findPlatform(payload.platform)?.name ?? payload.platform}，先在浏览器里登录一次`,
       );
     }
@@ -167,16 +169,30 @@ export async function collect(payload: SyncCreatorNotesPayload): Promise<SyncCre
       }
     }
 
+    // 滚到上限没到底只告警、不判失败：已经读到的那些是真数据，
+    // 判失败会把它们一起丢掉，而下一次采集大概率还是滚到同一个上限。
+    // 服务端拿 reachedEnd=false 就知道这一次的数据不保证是全的
     if (!reachedEnd && scrolls >= maxScrolls) {
-      warnings.push(`滚动 ${maxScrolls} 次后仍在加载，可能没到底`);
+      warnings.push(`[${COLLECT_ERROR.SCROLL_LIMIT_REACHED}] 滚动 ${maxScrolls} 次后仍在加载，可能没到底`);
     }
 
     const extracted = await runInTab(tabId, pageExtract, [spec]);
-    if (!extracted) throw new Error("页面没有返回采集结果");
+    if (!extracted) throw new CollectError(COLLECT_ERROR.LIST_NOT_APPEARED, "页面没有返回采集结果");
 
     const total = extracted.notes.length + extracted.unrecognized.length;
     if (total === 0) {
-      throw new Error("一条都没读到。要么选择器过时了，要么这个账号确实没有作品");
+      throw new CollectError(
+        COLLECT_ERROR.EMPTY_RESULT,
+        "一条都没读到。要么选择器过时了，要么这个账号确实没有作品",
+      );
+    }
+    // 一张卡都没认出指标：图标指纹整套过时了。这种情况下 notes 是空的，
+    // 回成功等于把一次「全错」记成一次「这个账号没作品」
+    if (extracted.notes.length === 0) {
+      throw new CollectError(
+        COLLECT_ERROR.METRIC_UNRECOGNIZED,
+        `${extracted.unrecognized.length} 张卡的指标图标一个都认不出来，采集规格里的图标指纹该更新了`,
+      );
     }
     if (extracted.unrecognized.length > 0) {
       warnings.push(`${extracted.unrecognized.length} 张卡的指标图标认不出来，已单独列出，没有猜值`);
